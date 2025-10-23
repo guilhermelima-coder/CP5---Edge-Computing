@@ -38,4 +38,222 @@ Quantidade	Componente	Função
 | LED   | Anodo (+)   | D2 (GPIO2)   | Saída digital de controle   |
 | LED   | Catodo (–)   | GND   | Terra   |
 
+---
+
+## ⚙️ Configuração do Ambiente
+1. Instalação do Arduino IDE
+
+- Baixar e instalar Arduino IDE.
+
+- Adicionar suporte ao ESP32:
+
+  - Arquivo > Preferências > URL adicionais de placas:
+
+      https://dl.espressif.com/dl/package_esp32_index.json
+
+
+  - Ferramentas > Placa > Gerenciador de Placas → Pesquisar e instalar ESP32.
+
+2. Bibliotecas Necessárias
+
+Instale as seguintes bibliotecas via Gerenciador de Bibliotecas:
+
+- DHT sensor library (by Adafruit)
+
+- Adafruit Unified Sensor
+
+- WiFi
+
+- PubSubClient (para MQTT)
+
+---
+
+## 📡 Configuração do Broker MQTT
+
+Para este projeto, utilizamos um broker MQTT gratuito:
+
+- Broker: test.mosquitto.org
+
+- Porta: 1883
+
+- Tópico de publicação (sensores):
+
+  - esp32/temperatura
+
+  - esp32/umidade
+
+  - esp32/luminosidade
+
+- Tópico de subscrição (atuador):
+
+  - esp32/led
+
+Você também pode usar um broker local, como Mosquitto.
+
+---
+
+## 📲 Configuração do MyMQTT
+<img width="1200" height="600" alt="opengraph" src="https://github.com/user-attachments/assets/34028401-f7bb-490e-9508-f8cc3b0eb710" />
+![300x0w](https://github.com/user-attachments/assets/d590905e-0c83-44e5-9d0d-423655017629)
+<img width="715" height="787" alt="image" src="https://github.com/user-attachments/assets/20c50126-1996-4418-837a-75d0a2f1740f" />
+
+1. Instale o aplicativo MyMQTT no seu smartphone.
+
+2. Vá em Configurações > Broker:
+
+- Host: test.mosquitto.org
+
+- Port: 1883
+
+- Client ID: (qualquer nome único, ex: esp32_user)
+
+- QoS: 0
+
+3. Adicione os tópicos:
+
+- esp32/temperatura
+
+- esp32/umidade
+
+- esp32/luminosidade
+
+- esp32/led (para enviar comandos “on” e “off”)
+
+---
+
+## 🧠 Código Fonte (ESP32)
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include "DHT.h"
+
+#define DHTPIN 4
+#define DHTTYPE DHT11
+#define LDRPIN 34
+#define LEDPIN 2
+
+const char* ssid = "NOME_DA_SUA_REDE";
+const char* password = "SENHA_DA_SUA_REDE";
+const char* mqtt_server = "test.mosquitto.org";
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+DHT dht(DHTPIN, DHTTYPE);
+
+void callback(char* topic, byte* message, unsigned int length) {
+  String msg;
+  for (int i = 0; i < length; i++) {
+    msg += (char)message[i];
+  }
+  if (String(topic) == "esp32/led") {
+    if (msg == "on") digitalWrite(LEDPIN, HIGH);
+    else if (msg == "off") digitalWrite(LEDPIN, LOW);
+  }
+}
+
+void reconnect() {
+  while (!client.connected()) {
+    if (client.connect("ESP32Client")) {
+      client.subscribe("esp32/led");
+    } else {
+      delay(5000);
+    }
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(LEDPIN, OUTPUT);
+  dht.begin();
+
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);
+    Serial.println("Conectando ao WiFi...");
+  }
+
+  client.setServer(mqtt_server, 1883);
+  client.setCallback(callback);
+}
+
+void loop() {
+  if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();
+
+  float temperatura = dht.readTemperature();
+  float umidade = dht.readHumidity();
+  int luminosidade = analogRead(LDRPIN);
+
+  if (!isnan(temperatura) && !isnan(umidade)) {
+    client.publish("esp32/temperatura", String(temperatura).c_str());
+    client.publish("esp32/umidade", String(umidade).c_str());
+  }
+
+  client.publish("esp32/luminosidade", String(luminosidade).c_str());
+
+  delay(3000);
+}
+
+---
+
+## 🧪 Testes Realizados
+
+- ✅ Conexão WiFi estável no ESP32.
+
+- ✅ Publicação periódica de dados dos sensores no broker MQTT.
+
+- ✅ Visualização dos valores no app MyMQTT em tempo real.
+
+- ✅ Controle do LED via mensagens MQTT (“on” / “off”).
+
+---
+
+## 📂 Organização do Repositório
+📁 Projeto_IoT_ESP32
+│
+├─ 📄 README.md
+├─ 📄 main.ino
+├─ 📸 imagens/
+│   ├─ esquematico.png
+│   ├─ mymqtt_config.png
+│   └─ resultado_teste.png
+└─ 📁 docs/
+    ├─ bibliotecas_utilizadas.txt
+    ├─ links_de_referencia.md
+    └─ instrucoes_instalacao_ide.pdf
+
+---
+
+## 📚 Referências
+
+- Arduino IDE — https://www.arduino.cc
+
+- Mosquitto — https://mosquitto.org
+
+- MyMQTT — Google Play
+
+- ESP32 — Documentação oficial: https://www.espressif.com
+
+---
+
+#🏁 Conclusão
+
+Este projeto demonstra de forma prática como:
+
+- Integrar sensores com um microcontrolador ESP32;
+
+- Utilizar protocolos IoT (MQTT) para comunicação em tempo real;
+
+- Visualizar dados e atuar remotamente usando um aplicativo móvel.
+
+A base desenvolvida pode ser facilmente expandida para incluir novos sensores, atuadores e dashboards profissionais.
+
+---
+
+## 👥 Projeto IoT desenvolvido por:
+  ## Guilherme Eduardo de Lima
+  ## Guilherme de Paula
+  ## Enzo de Faria
+  ## Matheus Gomes.
 
