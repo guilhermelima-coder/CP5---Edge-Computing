@@ -94,7 +94,9 @@ Você também pode usar um broker local, como Mosquitto.
 
 ## 📲 Configuração do MyMQTT
 <img width="1200" height="600" alt="opengraph" src="https://github.com/user-attachments/assets/34028401-f7bb-490e-9508-f8cc3b0eb710" />
-<![300x0w](https://github.com/user-attachments/assets/d590905e-0c83-44e5-9d0d-423655017629)
+
+![300x0w](https://github.com/user-attachments/assets/d590905e-0c83-44e5-9d0d-423655017629)
+
 <img width="715" height="787" alt="image" src="https://github.com/user-attachments/assets/20c50126-1996-4418-837a-75d0a2f1740f" />
 
 1. Instale o aplicativo MyMQTT no seu smartphone.
