@@ -200,6 +200,238 @@ void loop() {
 ```
 ---
 
+## 📊 Dashboard em Python (Monitoramento em Tempo Real)
+
+Para complementar o projeto e permitir a visualização dos dados dos sensores em tempo real, foi desenvolvido um Dashboard interativo utilizando Python, com as bibliotecas Dash, Plotly e MQTT.
+
+Este painel exibe gráficos dinâmicos de temperatura, umidade e luminosidade, atualizados automaticamente a partir das mensagens recebidas via broker MQTT.
+
+---
+
+## ⚙️ Estrutura e Funcionamento
+
+O código do dashboard estabelece uma conexão MQTT com o mesmo broker usado pelo ESP32.
+Sempre que uma nova leitura é publicada nos tópicos:
+
+esp32/temperatura
+
+esp32/umidade
+
+esp32/luminosidade
+o dashboard recebe esses valores, armazena-os temporariamente e atualiza os gráficos em tempo real.
+
+A interface foi criada com o Dash (Plotly) e organizada em três painéis principais:
+
+Gráfico de Temperatura (°C) — mostra a variação da temperatura ambiente ao longo do tempo.
+
+Gráfico de Umidade (%) — exibe as mudanças na umidade relativa do ar.
+
+Gráfico de Luminosidade (LDR) — representa a intensidade luminosa captada pelo sensor.
+Os gráficos são atualizados a cada 5 segundos por meio do componente dcc.Interval().
+
+---
+
+## 🧠 Código Fonte (DASHBOARD)
+```cpp
+import dash
+from dash import dcc, html
+import dash_bootstrap_components as dbc
+from dash.dependencies import Output, Input
+import plotly.graph_objs as go
+import paho.mqtt.client as mqtt
+from collections import deque
+import threading
+import datetime
+import json
+ 
+# ---------- CONFIGURAÇÕES MQTT ----------
+MQTT_BROKER = "44.223.0.185"
+MQTT_PORT = 1883
+TOPICS = ["esp32/temperatura", "esp32/umidade", "esp32/luminosidade"]
+ 
+# ---------- VARIÁVEIS GLOBAIS ----------
+data_temp = deque(maxlen=20)
+data_hum = deque(maxlen=20)
+data_ldr = deque(maxlen=20)
+ 
+timestamps_temp = deque(maxlen=20)
+timestamps_hum = deque(maxlen=20)
+timestamps_ldr = deque(maxlen=20)
+ 
+last_update = "Aguardando dados..."
+ 
+# ---------- CALLBACK MQTT ----------
+def on_connect(client, userdata, flags, rc):
+    print("Conectado ao broker MQTT com código:", rc)
+    for topic in TOPICS:
+        client.subscribe(topic)
+ 
+def on_message(client, userdata, msg):
+    global last_update
+    payload = msg.payload.decode()
+ 
+    try:
+        data = json.loads(payload)
+        time_str = data.get("timestamp", datetime.datetime.now().strftime("%H:%M:%S"))
+        value = float(data.get("value", 0))
+ 
+        if msg.topic == "esp32/temperatura":
+            data_temp.append(value)
+            timestamps_temp.append(time_str)
+        elif msg.topic == "esp32/umidade":
+            data_hum.append(value)
+            timestamps_hum.append(time_str)
+        elif msg.topic == "esp32/luminosidade":
+            data_ldr.append(value)
+            timestamps_ldr.append(time_str)
+ 
+        last_update = time_str
+        print("Payload recebido:", payload)
+ 
+    except Exception as e:
+        print("Erro ao processar mensagem MQTT:", e)
+        print("Payload recebido:", payload)
+ 
+def mqtt_thread():
+    client = mqtt.Client()
+    client.on_connect = on_connect
+    client.on_message = on_message
+    client.connect(MQTT_BROKER, MQTT_PORT, 60)
+    client.loop_forever()
+ 
+# ---------- INICIAR THREAD MQTT ----------
+threading.Thread(target=mqtt_thread, daemon=True).start()
+ 
+# ---------- DASHBOARD ----------
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+app.title = "Vinheria Agnello - IoT Dashboard"
+ 
+app.layout = dbc.Container([
+    html.Br(),
+    html.H1("🍷 Vinheria Agnello — Dashboard IoT",
+            style={"textAlign": "center", "color": "#800020", "fontWeight": "bold"}),
+ 
+    html.Hr(),
+ 
+    dbc.Row([
+        dbc.Col(html.Div([
+            html.H5("Última atualização:", style={"color": "#555"}),
+            html.P(id="update-time", style={"fontSize": "18px", "fontWeight": "bold", "color": "#800020"})
+        ]), width=4),
+    ], justify="center"),
+ 
+    dbc.Row([
+        dbc.Col(dcc.Graph(id="temp-graph"), md=4),
+        dbc.Col(dcc.Graph(id="hum-graph"), md=4),
+        dbc.Col(dcc.Graph(id="ldr-graph"), md=4),
+    ]),
+ 
+    dcc.Interval(
+        id="interval-component",
+        interval=5000,  # Atualiza a cada 5 segundos
+        n_intervals=0
+    )
+], fluid=True)
+ 
+# ---------- CALLBACKS ----------
+@app.callback(
+    [Output("temp-graph", "figure"),
+     Output("hum-graph", "figure"),
+     Output("ldr-graph", "figure"),
+     Output("update-time", "children")],
+    Input("interval-component", "n_intervals")
+)
+def update_graph(n):
+    # ----- Gráfico de Temperatura -----
+    fig_temp = go.Figure(go.Scatter(
+        x=list(timestamps_temp),  # tempo no eixo X
+        y=list(data_temp),        # valor no eixo Y
+        mode="lines+markers",
+        name="Temperatura (°C)",
+        line=dict(color="#800020")
+    ))
+    fig_temp.update_layout(
+        title="Temperatura",
+        xaxis=dict(title="Tempo"),
+        yaxis=dict(title="°C"),
+        template="plotly_dark"
+    )
+ 
+    # ----- Gráfico de Umidade -----
+    fig_hum = go.Figure(go.Scatter(
+        x=list(timestamps_hum),
+        y=list(data_hum),
+        mode="lines+markers",
+        name="Umidade (%)",
+        line=dict(color="#FFD700")
+    ))
+    fig_hum.update_layout(
+        title="Umidade",
+        xaxis=dict(title="Tempo"),
+        yaxis=dict(title="%"),
+        template="plotly_dark"
+    )
+ 
+    # ----- Gráfico de Luminosidade -----
+    fig_ldr = go.Figure(go.Scatter(
+        x=list(timestamps_ldr),
+        y=list(data_ldr),
+        mode="lines+markers",
+        name="Luminosidade",
+        line=dict(color="#9370DB")
+    ))
+    fig_ldr.update_layout(
+        title="Luminosidade",
+        xaxis=dict(title="Tempo"),
+        yaxis=dict(title="LDR"),
+        template="plotly_dark"
+    )
+ 
+    return fig_temp, fig_hum, fig_ldr, last_update
+ 
+ 
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0", port=8050)
+```
+---
+
+## 💻 Tecnologias Utilizadas
+
+Dash / Plotly → Criação da interface e dos gráficos interativos.
+
+Dash Bootstrap Components → Estilização com tema escuro e design responsivo.
+
+Paho-MQTT → Comunicação com o broker MQTT em tempo real.
+
+Threading e JSON → Processamento paralelo das mensagens e estruturação dos dados recebidos.
+
+🔌 Execução do Dashboard
+
+Certifique-se de ter o Python 3 instalado no sistema.
+
+Instale as dependências necessárias executando no terminal:
+
+pip install dash plotly dash-bootstrap-components paho-mqtt
+
+
+Verifique se o ESP32 já está publicando dados no broker MQTT.
+
+Salve o arquivo do dashboard como dashboard.py.
+
+Execute o dashboard com o comando:
+
+python dashboard.py
+
+
+Após a inicialização, o terminal exibirá uma mensagem semelhante a:
+
+Running on http://127.0.0.1:8050/
+
+
+Acesse o endereço no navegador (geralmente http://localhost:8050) para visualizar o dashboard em tempo real.
+
+---
+
 ## 🧪 Testes Realizados
 
 - ✅ Conexão WiFi estável no ESP32.
